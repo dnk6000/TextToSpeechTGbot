@@ -1,16 +1,45 @@
-# This is a sample Python script.
+import telebot
+import config
+import voice
 
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
+API_TOKEN = config.bot_token
 
+bot = telebot.TeleBot(API_TOKEN)
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
+voices = voice.get_all_voices()
 
+voice_buttons = telebot.types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
 
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
+for v in voices:
+    button = telebot.types.KeyboardButton(v['name'])
+    voice_buttons.add(button)
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+selected_voice = {}
+
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    bot.reply_to(message, "Привет! Я бот для создания озвучки! Выбери голос, который будет использоваться при создании озвучки:",
+                 reply_markup=voice_buttons)
+
+@bot.message_handler(func=lambda message: message.text in [v['name'] for v in voices])
+def voice_selected(message):
+    user_id = message.from_user.id
+    selected_voice[user_id] = message.text
+    bot.reply_to(message, f"Вы выбрали голос: {message.text}. Теперь введите текст для озвучки:")
+
+@bot.message_handler(func=lambda message: True)
+def generate_voice(message):
+    user_id = message.from_user.id
+    if user_id in selected_voice:
+        voice_name = selected_voice[user_id]
+        voice_id = next(v['id'] for v in voices if v['name'] == voice_name)
+        audio_file = voice.generate_audio(message.text, voice_id)
+        with open(audio_file, 'rb') as audio:
+            bot.send_voice(user_id, audio)
+        with open(audio_file, 'rb') as audio:
+            bot.send_audio(user_id, audio)
+    else:
+        bot.reply_to(message, "Сначала выберите голос командой /start")
+
+if __name__ == "__main__":
+    bot.polling(none_stop=True)
